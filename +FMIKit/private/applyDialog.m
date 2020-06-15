@@ -24,18 +24,18 @@ if userData.useSourceCode
     
     mex_args = {};
               
-    % custom sources
-    custom_include = get_param(gcs, 'CustomInclude');
-    custom_include = split_paths(custom_include);
-    for i = 1:numel(custom_include)
-        mex_args{end+1} = ['-I"' custom_include{i} '"'];
+    % include directories
+    include_dirs = get_param(gcs, 'SimUserIncludeDirs');
+    include_dirs = split_paths(include_dirs);
+    for i = 1:numel(include_dirs)
+        mex_args{end+1} = ['-I"' include_dirs{i} '"'];
     end
     
-    % custom libraries
-    custom_library = get_param(gcs, 'CustomLibrary');
-    custom_library = split_paths(custom_library);
-    for i = 1:numel(custom_library)
-        mex_args{end+1} = ['"' custom_library{i} '"'];
+    % libraries
+    libraries = get_param(gcs, 'SimUserLibraries');
+    libraries = split_paths(libraries);
+    for i = 1:numel(libraries)
+        mex_args{end+1} = ['"' libraries{i} '"'];
     end
     
     % S-function source
