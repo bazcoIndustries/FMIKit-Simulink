@@ -7,12 +7,12 @@ switch hookMethod
         current_dir = pwd;
         
         % remove FMU build directory from previous build
-        if exist('FMUArchive', 'dir')
-            rmdir('FMUArchive', 's');
+        if exist('./FMUArchive', 'dir')
+            rmdir('./FMUArchive', 's');
         end
         
         % create the archive directory (uncompressed FMU)
-        mkdir('FMUArchive');
+        mkdir('./FMUArchive');
         
         template_dir = get_param(gcs, 'FMUTemplateDir');
         
@@ -72,9 +72,49 @@ switch hookMethod
         disp('### Running CMake generator')
         
         % get model sources
-        [custom_include, custom_source, custom_library] = ...
-            grtfmi_model_sources(modelName, pwd);
+        %[custom_include, custom_source, custom_library] = ...
+        %    grtfmi_model_sources(modelName, pwd);
         
+        % Get all source files from buildInfo.  Some file names may be relative paths or
+        % may not have any path component.  Use Java to detect absolute paths and leave
+        % those alone.  (No MATLAB built-in to ascertain absolute or relative paths.)
+        % For relative paths, brute-force search the source path list until each file
+        % is located.  Warn of any that cannot be found.
+        custom_source = buildInfo.getSourceFiles(true, true);
+        custom_source_paths = buildInfo.getSourcePaths(true);
+       	for k = 1 : length(custom_source)
+            f = java.io.File(custom_source{k});
+            if ~f.isAbsolute()
+                found = false;
+                for j = 1 : length(custom_source_paths)
+                    proposed = [custom_source_paths{j} '/' custom_source{k}];
+                    if exist(proposed, 'file')
+                        custom_source{k} = proposed;
+                        found = true;
+                        break;
+                    end
+                end
+                if ~found
+                    warning('*** WARNING: Could not locate %s', custom_source{k});
+                end
+            end
+        end
+        
+        % remove files from Matlab installation. TODO: these should not be
+        % added in the first place but we would have to modify the grt.tlc
+        % file to fix this (probably)
+        matches = cellfun('isempty', regexp(custom_source, '[\\/](rt_printf\.c|rt_main\.c|rt_malloc_main\.c)$'));
+        custom_source = custom_source(matches); 
+
+        custom_include = buildInfo.getIncludePaths(true);
+
+        custom_library_directories = buildInfo.getLibraryPaths(true, true);
+        if ~isempty(buildInfo.getLinkObjects)
+            custom_library = {buildInfo.getLinkObjects.Name}';
+        else
+            custom_library = {};
+        end
+ 
         custom_include = cmake_list(custom_include);
         custom_source  = cmake_list(custom_source);
         custom_library = cmake_list(custom_library);
@@ -97,8 +137,8 @@ switch hookMethod
         fprintf(fid, 'SOURCE_CODE_FMU:BOOL=%s\n', upper(source_code_fmu));
         fprintf(fid, 'SIMSCAPE:BOOL=%s\n', upper(simscape_blocks));
         fprintf(fid, 'FMI_VERSION:STRING=%s\n', fmi_version);
-        fprintf(fid, 'COMPILER_OPTIMIZATION_LEVEL:STRING=%s\n', get_param(gcs, 'CMakeCompilerOptimizationLevel'));
-        fprintf(fid, 'COMPILER_OPTIMIZATION_FLAGS:STRING=%s\n', get_param(gcs, 'CMakeCompilerOptimizationFlags'));
+        fprintf(fid, 'COMPILER_OPTIMIZATION_LEVEL:STRING=%s\n', get_param(bdroot, 'CMakeCompilerOptimizationLevel'));
+        fprintf(fid, 'COMPILER_OPTIMIZATION_FLAGS:STRING=%s\n', get_param(bdroot, 'CMakeCompilerOptimizationFlags'));
         fclose(fid);
         
         disp('### Generating project')
@@ -116,16 +156,6 @@ end
 end
 
 function joined = cmake_list(array)
-
-if isempty(array)
-    joined = '';
-    return
-end
-
-joined = array{1};
-
-for i = 2:numel(array)
-    joined = [joined ';' array{i}];  %#ok<ARGROW>
-end
-
+joined = strjoin(array, ';');
+joined = strrep(joined, '\', '/');
 end
